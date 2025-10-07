@@ -264,13 +264,13 @@ export const fetchPlaylistDetails = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/playlist/details/`,
-      params: { id: playlistId, hl: "en" },
+      url: `${API_CONFIG.BASE_URL}/playlist`,
+      params: { id: playlistId },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data,
+      data: response.data.data,
       error: null,
       isError: false,
     };
@@ -283,20 +283,71 @@ export const fetchPlaylistDetails = async (
   }
 };
 
-export const fetchPlaylistVideos = async (
-  playlistId: string,
+export const fetchShortsVideos = async (
+  channelId: string,
   params?: Record<string, any>
 ): Promise<ApiResponse<any[]>> => {
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/playlist/videos/`,
-      params: { id: playlistId, hl: "en", ...params },
+      url: `${API_CONFIG.BASE_URL}/channel/shorts`,
+      params: { id: channelId, ...params },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data.contents || [],
+      data: response.data.data || [],
+      error: null,
+      isError: false,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: handleApiError(error),
+      isError: true,
+    };
+  }
+};
+
+export const fetchChannelHome = async (
+  channelId: string,
+  params?: Record<string, any>
+): Promise<ApiResponse<any[]>> => {
+  try {
+    const response = await axios.request({
+      method: "GET",
+      url: `${API_CONFIG.BASE_URL}/channel/home`,
+      params: { id: channelId, ...params },
+      headers: getHeaders(),
+      timeout: 10000,
+    });
+    return {
+      data: response.data.data || [],
+      error: null,
+      isError: false,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: handleApiError(error),
+      isError: true,
+    };
+  }
+};
+export const fetchChannelAbout = async (
+  channelId: string,
+  params?: Record<string, any>
+): Promise<ApiResponse<any[]>> => {
+  try {
+    const response = await axios.request({
+      method: "GET",
+      url: `${API_CONFIG.BASE_URL}/channel/about`,
+      params: { id: channelId, ...params },
+      headers: getHeaders(),
+      timeout: 10000,
+    });
+    return {
+      data: response.data || [],
       error: null,
       isError: false,
     };

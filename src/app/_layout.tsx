@@ -5,6 +5,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { validateApiConfig } from "../config/api.config";
 import ChannelScreen from "../screens/ChannelScreen";
 import HomeScreen from "../screens/HomeScrees";
+import PlaylistDetailsScreen from "../screens/PlaylistDetails";
 import SearchScreen from "../screens/SearchScreen";
 import VideoDetailsScreen from "../screens/VideoDetailsScreen";
 import { RootStackParamList } from "../types/navigation";
@@ -37,6 +38,10 @@ export default function RootLayout() {
         <Stack.Screen name="VideoDetails" component={VideoDetailsScreen} />
         <Stack.Screen name="Channel" component={ChannelScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
+        <Stack.Screen
+          name="PlaylistDetails"
+          component={PlaylistDetailsScreen}
+        />
       </Stack.Navigator>
     </ErrorBoundary>
   );
