@@ -52,10 +52,14 @@ export const formatDuration = (seconds: number): string => {
 
 export const formatDate = (dateString: string): string => {
   try {
+    if (!dateString) return "";
+
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString; // invalid date fallback
+
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays < 1) return "Today";
     if (diffDays === 1) return "Yesterday";

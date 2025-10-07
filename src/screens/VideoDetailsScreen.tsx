@@ -1,5 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
-import { AntDesign, Feather, MaterialIcons } from "@expo/vector-icons";
+import {
+  AntDesign,
+  Feather,
+  Ionicons,
+  MaterialIcons,
+} from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
 import {
@@ -14,12 +20,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  fetchChannelDetails,
   fetchComments,
   fetchRelatedVideos,
   fetchVideoDetails,
 } from "../api/api-client";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingScreen } from "../components/LoadingScreen";
+import { formatDate, formatNumber } from "../utils/format";
 
 const { width } = Dimensions.get("window");
 
@@ -28,30 +36,42 @@ interface VideoDetails {
   title: string;
   channelTitle: string;
   channelId: string;
-  channelThumbnail: { url: string }[];
+  thumbnail: { url: string }[];
   viewCount: string;
   likeCount: string;
-  publishedDate: string;
+  publishDate: string;
   description: string;
+  author: {
+    channelId: string;
+  };
   subscriberCountText: string;
+  stats: {
+    views: string;
+    likes: string;
+    comments: string;
+  };
 }
 
 interface Comment {
   commentId: string;
   authorText: string;
-  authorThumbnail: { url: string }[];
+  authorChannelId: string;
+  authorThumbnail?: { url: string }[];
   textDisplay: string;
   publishedTimeText: string;
-  likeCount: string;
+  likesCount: string;
 }
 
 const VideoDetailsScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { videoId } = route.params as { videoId: string };
-
+  const { videoId, channelId } = route.params as {
+    videoId: string;
+    channelId: string;
+  };
   const [videoDetails, setVideoDetails] = useState<VideoDetails | null>(null);
   const [relatedVideos, setRelatedVideos] = useState<any[]>([]);
+  const [channelDetails, setChannelDetails] = useState<any>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,18 +82,18 @@ const VideoDetailsScreen: React.FC = () => {
     fetchData();
   }, [videoId]);
 
-  console.log({ videoId });
-
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [detailsResult, relatedResult, commentsResult] = await Promise.all([
-        fetchVideoDetails(videoId),
-        fetchRelatedVideos(videoId),
-        fetchComments(videoId),
-      ]);
+      const [detailsResult, relatedResult, commentsResult, channelResult] =
+        await Promise.all([
+          fetchVideoDetails(videoId),
+          fetchRelatedVideos(videoId),
+          fetchComments(videoId),
+          fetchChannelDetails(channelId),
+        ]);
 
       if (detailsResult.isError) {
         setError(detailsResult.error || "Failed to load video details");
@@ -88,29 +108,31 @@ const VideoDetailsScreen: React.FC = () => {
       if (!commentsResult.isError) {
         setComments(commentsResult.data || []);
       }
-    } catch (err) {
+
+      if (!channelResult.isError) {
+        setChannelDetails(channelResult.data);
+      }
+    } catch (_error) {
       setError("An unexpected error occurred");
-      console.error("Error fetching video data:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatNumber = (num: string): string => {
-    const number = parseInt(num);
-    if (number >= 1000000) return `${(number / 1000000).toFixed(1)}M`;
-    if (number >= 1000) return `${(number / 1000).toFixed(1)}K`;
-    return num;
-  };
-
   const handleChannelPress = () => {
     if (videoDetails?.channelId) {
-      navigation.navigate("Channel", { channelId: videoDetails.channelId });
+      navigation.navigate("Channel", { channelId: videoDetails?.channelId });
     }
   };
 
-  const handleRelatedVideoPress = (relatedVideoId: string) => {
-    navigation.navigate("VideoDetails", { videoId: relatedVideoId });
+  const handleRelatedVideoPress = (
+    relatedVideoId: string,
+    channelId: string
+  ) => {
+    navigation.navigate("VideoDetails", {
+      videoId: relatedVideoId,
+      channelId: channelId,
+    });
   };
 
   if (loading) {
@@ -122,6 +144,11 @@ const VideoDetailsScreen: React.FC = () => {
       <ErrorMessage message={error || "Video not found"} onRetry={fetchData} />
     );
   }
+
+  // console.log(JSON.stringify(videoDetails, null, 4), "videoDetails");
+  // console.log(JSON.stringify(relatedVideos, null, 4), "relatedVideos");
+  // console.log(JSON.stringify(comments, null, 4), "comments");
+  // console.log(JSON.stringify(channelDetails, null, 4), "channelDetails");
 
   return (
     <View style={styles.container}>
@@ -142,16 +169,22 @@ const VideoDetailsScreen: React.FC = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Video Player Placeholder */}
         <View style={styles.videoPlayer}>
-          <MaterialIcons name="play-circle-outline" size={64} color="white" />
-          <Text style={styles.videoIdText}>Video ID: {videoId}</Text>
+          <View style={styles.videoBtn}>
+            <Ionicons name="play-circle" size={44} color="white" />
+          </View>
+          <Image
+            source={{ uri: videoDetails.thumbnail?.[5]?.url || "" }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
         </View>
 
         {/* Video Info */}
         <View style={styles.videoInfoSection}>
           <Text style={styles.videoTitle}>{videoDetails.title}</Text>
           <Text style={styles.videoStats}>
-            {formatNumber(videoDetails.viewCount)} views •{" "}
-            {videoDetails.publishedDate}
+            {formatNumber(videoDetails?.viewCount)} views •{" "}
+            {formatDate(videoDetails?.publishDate)}
           </Text>
 
           {/* Action Buttons */}
@@ -161,13 +194,13 @@ const VideoDetailsScreen: React.FC = () => {
             style={styles.actionsContainer}
           >
             <TouchableOpacity style={styles.actionButton}>
-              <AntDesign name="like2" size={20} color="white" />
+              <AntDesign name="like" size={20} color="white" />
               <Text style={styles.actionText}>
-                {formatNumber(videoDetails.likeCount)}
+                {formatNumber(videoDetails?.likeCount)}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionButton}>
-              <AntDesign name="dislike2" size={20} color="white" />
+              <AntDesign name="dislike" size={20} color="white" />
               <Text style={styles.actionText}>Dislike</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionButton}>
@@ -193,13 +226,16 @@ const VideoDetailsScreen: React.FC = () => {
           onPress={handleChannelPress}
         >
           <Image
-            source={{ uri: videoDetails.channelThumbnail?.[0]?.url || "" }}
+            source={{ uri: channelDetails?.meta?.avatar?.[1]?.url || "" }}
             style={styles.channelAvatar}
           />
           <View style={styles.channelInfo}>
-            <Text style={styles.channelName}>{videoDetails.channelTitle}</Text>
+            <Text style={styles.channelName}>
+              {channelDetails?.meta?.title}
+            </Text>
             <Text style={styles.subscriberCount}>
-              {videoDetails.subscriberCountText || "Subscribe"}
+              {formatNumber(channelDetails?.meta?.subscriberCount) ||
+                "Subscribe"}
             </Text>
           </View>
           <TouchableOpacity style={styles.subscribeButton}>
@@ -213,7 +249,7 @@ const VideoDetailsScreen: React.FC = () => {
             style={styles.description}
             numberOfLines={showFullDescription ? undefined : 3}
           >
-            {videoDetails.description}
+            {videoDetails?.description}
           </Text>
           <TouchableOpacity
             onPress={() => setShowFullDescription(!showFullDescription)}
@@ -251,7 +287,7 @@ const VideoDetailsScreen: React.FC = () => {
                 activeTab === "comments" && styles.tabTextActive,
               ]}
             >
-              Comments ({comments.length})
+              Comments ({comments?.length})
             </Text>
           </TouchableOpacity>
         </View>
@@ -259,11 +295,13 @@ const VideoDetailsScreen: React.FC = () => {
         {/* Related Videos */}
         {activeTab === "related" && (
           <View style={styles.relatedSection}>
-            {relatedVideos.map((video, index) => (
+            {relatedVideos?.map((video, index) => (
               <TouchableOpacity
                 key={`${video.videoId}-${index}`}
                 style={styles.relatedVideoCard}
-                onPress={() => handleRelatedVideoPress(video.videoId)}
+                onPress={() =>
+                  handleRelatedVideoPress(video.videoId, video.channelId)
+                }
               >
                 <Image
                   source={{ uri: video.thumbnail?.[0]?.url || "" }}
@@ -273,12 +311,24 @@ const VideoDetailsScreen: React.FC = () => {
                   <Text style={styles.relatedVideoTitle} numberOfLines={2}>
                     {video.title}
                   </Text>
-                  <Text style={styles.relatedVideoMeta}>
-                    {video.channelTitle}
-                  </Text>
-                  <Text style={styles.relatedVideoMeta}>
-                    {formatNumber(video.viewCount)} views
-                  </Text>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <Image
+                      source={{ uri: video?.channelThumbnail?.[0]?.url || "" }}
+                      style={styles.channelRelatedAvatar}
+                    />
+                    <View>
+                      <Text style={styles.relatedVideoMeta}>
+                        {video.channelTitle}
+                      </Text>
+
+                      <Text style={styles.relatedVideoMeta}>
+                        {video.viewCountText}
+                      </Text>
+                      <Text style={styles.relatedVideoMeta}>
+                        {video.publishedTimeText}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </TouchableOpacity>
             ))}
@@ -288,39 +338,39 @@ const VideoDetailsScreen: React.FC = () => {
         {/* Comments */}
         {activeTab === "comments" && (
           <View style={styles.commentsSection}>
-            {comments.length === 0 ? (
+            {comments?.length === 0 ? (
               <View style={styles.noCommentsContainer}>
                 <Feather name="message-circle" size={48} color="#666" />
                 <Text style={styles.noCommentsText}>No comments available</Text>
               </View>
             ) : (
-              comments.map((comment) => (
+              comments?.map((comment) => (
                 <View key={comment.commentId} style={styles.commentCard}>
                   <Image
-                    source={{ uri: comment.authorThumbnail?.[0]?.url || "" }}
+                    source={{ uri: comment?.authorThumbnail?.[0]?.url || "" }}
                     style={styles.commentAvatar}
                   />
                   <View style={styles.commentContent}>
                     <View style={styles.commentHeader}>
                       <Text style={styles.commentAuthor}>
-                        {comment.authorText}
+                        {comment?.authorText || "Unknown"}
                       </Text>
                       <Text style={styles.commentTime}>
-                        {comment.publishedTimeText}
+                        {comment?.publishedTimeText}
                       </Text>
                     </View>
                     <Text style={styles.commentText}>
-                      {comment.textDisplay}
+                      {comment?.textDisplay}
                     </Text>
                     <View style={styles.commentActions}>
                       <TouchableOpacity style={styles.commentAction}>
-                        <AntDesign name="like2" size={14} color="#aaa" />
+                        <AntDesign name="like" size={14} color="#aaa" />
                         <Text style={styles.commentActionText}>
-                          {formatNumber(comment.likeCount)}
+                          {formatNumber(comment?.likesCount)}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.commentAction}>
-                        <AntDesign name="dislike2" size={14} color="#aaa" />
+                        <AntDesign name="dislike" size={14} color="#aaa" />
                       </TouchableOpacity>
                       <TouchableOpacity>
                         <Text style={styles.replyText}>Reply</Text>
@@ -332,6 +382,7 @@ const VideoDetailsScreen: React.FC = () => {
             )}
           </View>
         )}
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -351,6 +402,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     backgroundColor: "#0f0f0f",
+  },
+  thumbnail: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    backgroundColor: "#282828",
+  },
+  videoBtn: {
+    position: "absolute",
+    zIndex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
   headerRight: {
     flexDirection: "row",
@@ -416,6 +481,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: "#282828",
+  },
+  channelRelatedAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: "#282828",
   },
   channelInfo: {

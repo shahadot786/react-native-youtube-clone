@@ -10,8 +10,10 @@ interface ApiResponse<T> {
 const handleApiError = (error: unknown): string => {
   if (isAxiosError(error)) {
     const axiosError = error as AxiosError;
+    const apiErrorMessage =
+      axiosError.message || axiosError.response?.statusText;
     if (axiosError.response) {
-      return `API Error: ${axiosError.response.status} - ${axiosError.response.statusText}`;
+      return `API Error: ${axiosError.response.status} - ${apiErrorMessage}`;
     } else if (axiosError.request) {
       return "Network Error: No response received from server";
     }
@@ -31,18 +33,17 @@ export const fetchTrendingVideos = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/v2/trending`,
-      params: { hl: "en", ...params },
+      url: `${API_CONFIG.BASE_URL}/trending`,
+      params: { geo: "US", ...params },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data.list || [],
+      data: response.data.data || [],
       error: null,
       isError: false,
     };
   } catch (error) {
-    console.error("fetchTrendingVideos error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -57,8 +58,8 @@ export const fetchVideoDetails = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/video/details`,
-      params: { id: videoId, hl: "en" },
+      url: `${API_CONFIG.BASE_URL}/video/info`,
+      params: { id: videoId },
       headers: getHeaders(),
       timeout: 10000,
     });
@@ -68,7 +69,6 @@ export const fetchVideoDetails = async (
       isError: false,
     };
   } catch (error) {
-    console.error("fetchVideoDetails error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -110,8 +110,8 @@ export const fetchChannelDetails = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/v2/channel-details`,
-      params: { id: channelId, hl: "en" },
+      url: `${API_CONFIG.BASE_URL}/channel/home`,
+      params: { id: channelId },
       headers: getHeaders(),
       timeout: 10000,
     });
@@ -137,18 +137,17 @@ export const fetchRelatedVideos = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/video/related-contents/`,
-      params: { id: videoId, hl: "en", ...params },
+      url: `${API_CONFIG.BASE_URL}/related`,
+      params: { id: videoId, ...params },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data.contents || [],
+      data: response.data.data,
       error: null,
       isError: false,
     };
   } catch (error) {
-    console.error("fetchRelatedVideos error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -164,18 +163,17 @@ export const fetchComments = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/video/comments/`,
-      params: { id: videoId, hl: "en", ...params },
+      url: `${API_CONFIG.BASE_URL}/comments`,
+      params: { id: videoId, ...params },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data.comments || [],
+      data: response.data.data,
       error: null,
       isError: false,
     };
   } catch (error) {
-    console.error("fetchComments error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -191,13 +189,13 @@ export const fetchChannelVideos = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/channel/videos/`,
-      params: { id: channelId, hl: "en", ...params },
+      url: `${API_CONFIG.BASE_URL}/channel/videos`,
+      params: { id: channelId, ...params },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data.contents || [],
+      data: response.data,
       error: null,
       isError: false,
     };

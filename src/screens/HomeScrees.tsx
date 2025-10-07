@@ -24,12 +24,12 @@ import { useApi } from "../hooks/useApi";
 interface Video {
   videoId: string;
   title: string;
-  author: string;
+  channelTitle: string;
   channelId: string;
   viewCount: string;
-  publishedText: string;
-  videoThumbnails: { url: string }[];
-  authorThumbnails: { url: string }[];
+  publishedTimeText: string;
+  thumbnail: { url: string }[];
+  channelAvatar: { url: string }[];
 }
 
 const HomeScreen: React.FC = () => {
@@ -49,7 +49,10 @@ const HomeScreen: React.FC = () => {
   }, [execute]);
 
   const handleVideoPress = (video: Video) => {
-    navigation.navigate("VideoDetails", { videoId: video.videoId });
+    navigation.navigate("VideoDetails", {
+      videoId: video.videoId,
+      channelId: video.channelId,
+    });
   };
 
   const handleChannelPress = (channelId: string) => {
@@ -63,7 +66,6 @@ const HomeScreen: React.FC = () => {
       <VideoCardSkeleton />
     </>
   );
-
   if (loading && !refreshing) {
     return (
       <View style={styles.container}>
@@ -187,12 +189,12 @@ const HomeScreen: React.FC = () => {
           <VideoCard
             videoId={item.videoId}
             title={item.title}
-            channelTitle={item.author}
+            channelTitle={item.channelTitle}
             channelId={item.channelId}
             viewCount={item.viewCount}
-            publishedTimeText={item.publishedText}
-            thumbnail={item.videoThumbnails?.[1]?.url || ""}
-            channelThumbnail={item.authorThumbnails?.[3]?.url || ""}
+            publishedTimeText={item.publishedTimeText}
+            thumbnail={item.thumbnail?.[2]?.url || ""}
+            channelThumbnail={item.channelAvatar?.[0]?.url || ""}
             onPress={() => handleVideoPress(item)}
             onChannelPress={() => handleChannelPress(item.channelId)}
             onMorePress={() => {}}
@@ -213,6 +215,7 @@ const HomeScreen: React.FC = () => {
             <Text style={styles.emptyText}>No videos available</Text>
           </View>
         }
+        ListFooterComponent={<View style={{ height: 100 }} />}
       />
     </View>
   );
