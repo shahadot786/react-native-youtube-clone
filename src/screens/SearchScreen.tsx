@@ -63,8 +63,8 @@ const SearchScreen: React.FC = () => {
     }
   }, [searchQuery]);
 
-  const handleVideoPress = (videoId: string) => {
-    navigation.navigate("VideoDetails", { videoId });
+  const handleVideoPress = (videoId: string, channelId: string) => {
+    navigation.navigate("VideoDetails", { videoId, channelId });
   };
 
   const handleChannelPress = (channelId: string) => {
@@ -81,7 +81,7 @@ const SearchScreen: React.FC = () => {
   const renderSearchResult = ({ item }: { item: SearchResult }) => (
     <TouchableOpacity
       style={styles.resultCard}
-      onPress={() => handleVideoPress(item.videoId)}
+      onPress={() => handleVideoPress(item.videoId, item.channelId)}
       activeOpacity={0.9}
     >
       <Image
@@ -123,13 +123,14 @@ const SearchScreen: React.FC = () => {
           <Feather name="search" size={20} color="#aaa" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search YouTube"
+            placeholder="Search Videos..."
             placeholderTextColor="#aaa"
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={handleSearch}
             returnKeyType="search"
             autoFocus
+            keyboardAppearance="dark"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -169,6 +170,8 @@ const SearchScreen: React.FC = () => {
           keyExtractor={(item, index) => `${item.videoId}-${index}`}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          ListFooterComponent={<View style={{ height: 100 }} />}
         />
       )}
     </View>
@@ -189,6 +192,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     backgroundColor: "#0f0f0f",
     gap: 12,
+    marginTop: 14,
   },
   searchContainer: {
     flex: 1,
@@ -197,13 +201,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#272727",
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 4,
     gap: 8,
   },
   searchInput: {
     flex: 1,
     color: "#f1f1f1",
-    fontSize: 16,
+    fontSize: 14,
   },
   centerContainer: {
     flex: 1,

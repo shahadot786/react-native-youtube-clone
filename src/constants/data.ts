@@ -1,5 +1,7 @@
-export const CATEGORIES = [
-  { id: "1", title: "All" },
+export const TAGS = [
+  { id: "0", title: "All" },
+  { id: "13", title: "Trending" },
+  { id: "1", title: "Viral" },
   { id: "2", title: "Music" },
   { id: "3", title: "Gaming" },
   { id: "4", title: "News" },

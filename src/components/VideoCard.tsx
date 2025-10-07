@@ -12,6 +12,7 @@ interface VideoCardProps {
   publishedTimeText: string;
   thumbnail: string;
   channelThumbnail: string;
+  lengthText: string;
   onPress: () => void;
   onChannelPress: () => void;
   onMorePress?: () => void;
@@ -27,6 +28,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({
   onPress,
   onChannelPress,
   onMorePress,
+  lengthText,
 }) => {
   return (
     <TouchableOpacity
@@ -34,11 +36,14 @@ export const VideoCard: React.FC<VideoCardProps> = ({
       onPress={onPress}
       activeOpacity={0.9}
     >
-      <Image
-        source={{ uri: thumbnail }}
-        style={styles.thumbnail}
-        resizeMode="cover"
-      />
+      <View>
+        <Image
+          source={{ uri: thumbnail }}
+          style={styles.thumbnail}
+          resizeMode="cover"
+        />
+        <Text style={styles.lengthText}>{lengthText}</Text>
+      </View>
       <View style={styles.infoContainer}>
         <TouchableOpacity onPress={onChannelPress}>
           <Image
@@ -74,6 +79,15 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 16 / 9,
     backgroundColor: "#282828",
+  },
+  lengthText: {
+    color: "white",
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    backgroundColor: "#282828",
+    borderRadius: 2,
+    paddingHorizontal: 2,
   },
   infoContainer: {
     flexDirection: "row",

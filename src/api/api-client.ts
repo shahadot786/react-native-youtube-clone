@@ -84,18 +84,17 @@ export const searchVideos = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/search/`,
-      params: { q: query, hl: "en", ...params },
+      url: `${API_CONFIG.BASE_URL}/search`,
+      params: { query: query, ...params },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data.contents || [],
+      data: response.data.data,
       error: null,
       isError: false,
     };
   } catch (error) {
-    console.error("searchVideos error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -121,7 +120,6 @@ export const fetchChannelDetails = async (
       isError: false,
     };
   } catch (error) {
-    console.error("fetchChannelDetails error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -182,6 +180,32 @@ export const fetchComments = async (
   }
 };
 
+export const fetchHashtagVideo = async (
+  tag: string,
+  params?: Record<string, any>
+): Promise<ApiResponse<any[]>> => {
+  try {
+    const response = await axios.request({
+      method: "GET",
+      url: `${API_CONFIG.BASE_URL}/hashtag`,
+      params: { tag: tag, ...params },
+      headers: getHeaders(),
+      timeout: 10000,
+    });
+    return {
+      data: response.data.data,
+      error: null,
+      isError: false,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: handleApiError(error),
+      isError: true,
+    };
+  }
+};
+
 export const fetchChannelVideos = async (
   channelId: string,
   params?: Record<string, any>
@@ -195,12 +219,11 @@ export const fetchChannelVideos = async (
       timeout: 10000,
     });
     return {
-      data: response.data,
+      data: response.data.data,
       error: null,
       isError: false,
     };
   } catch (error) {
-    console.error("fetchChannelVideos error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -216,18 +239,17 @@ export const fetchChannelPlaylists = async (
   try {
     const response = await axios.request({
       method: "GET",
-      url: `${API_CONFIG.BASE_URL}/channel/playlists/`,
-      params: { id: channelId, hl: "en", ...params },
+      url: `${API_CONFIG.BASE_URL}/channel/playlists`,
+      params: { id: channelId, ...params },
       headers: getHeaders(),
       timeout: 10000,
     });
     return {
-      data: response.data.contents || [],
+      data: response.data.data || [],
       error: null,
       isError: false,
     };
   } catch (error) {
-    console.error("fetchChannelPlaylists error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -253,7 +275,6 @@ export const fetchPlaylistDetails = async (
       isError: false,
     };
   } catch (error) {
-    console.error("fetchPlaylistDetails error:", error);
     return {
       data: null,
       error: handleApiError(error),
@@ -280,7 +301,6 @@ export const fetchPlaylistVideos = async (
       isError: false,
     };
   } catch (error) {
-    console.error("fetchPlaylistVideos error:", error);
     return {
       data: null,
       error: handleApiError(error),

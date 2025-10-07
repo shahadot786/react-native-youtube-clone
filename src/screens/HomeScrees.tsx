@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -14,12 +15,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { fetchTrendingVideos } from "../api/api-client";
+import { fetchHashtagVideo, fetchTrendingVideos } from "../api/api-client";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { VideoCardSkeleton } from "../components/SkeletonLoader";
 import { VideoCard } from "../components/VideoCard";
-import { CATEGORIES } from "../constants/data";
-import { useApi } from "../hooks/useApi";
+import { TAGS } from "../constants/data";
 
 interface Video {
   videoId: string;
@@ -30,23 +30,85 @@ interface Video {
   publishedTimeText: string;
   thumbnail: { url: string }[];
   channelAvatar: { url: string }[];
+  lengthText: string;
+}
+
+interface Items {
+  id: string;
+  title: string;
 }
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedTag, setSelectedTag] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: videos, loading, error, execute } = useApi(fetchTrendingVideos);
-
-  useEffect(() => {
-    execute();
+  // Fetch trending videos
+  const loadTrendingVideos = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchTrendingVideos();
+      if (result.isError) {
+        setError(result.error);
+        setVideos([]);
+      } else {
+        setVideos(result.data || []);
+      }
+    } catch (err) {
+      setError("Failed to fetch videos");
+      setVideos([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Fetch videos by tag
+  const loadVideosByTag = useCallback(async (tag: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchHashtagVideo(tag.toLowerCase());
+      if (result.isError) {
+        setError(result.error);
+        setVideos([]);
+      } else {
+        setVideos(result.data || []);
+      }
+    } catch (err) {
+      setError("Failed to fetch videos");
+      setVideos([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial load - fetch trending videos
+  useEffect(() => {
+    loadTrendingVideos();
+  }, []);
+
+  // Fetch videos when tag changes
+  useEffect(() => {
+    if (selectedTag === "All") {
+      loadTrendingVideos();
+    } else {
+      loadVideosByTag(selectedTag);
+    }
+  }, [selectedTag]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await execute();
+    if (selectedTag === "All") {
+      await loadTrendingVideos();
+    } else {
+      await loadVideosByTag(selectedTag);
+    }
     setRefreshing(false);
-  }, [execute]);
+  }, [selectedTag]);
 
   const handleVideoPress = (video: Video) => {
     navigation.navigate("VideoDetails", {
@@ -59,6 +121,10 @@ const HomeScreen: React.FC = () => {
     navigation.navigate("Channel", { channelId });
   };
 
+  const handleTagPress = (item: Items) => {
+    setSelectedTag(item.title);
+  };
+
   const renderSkeletons = () => (
     <>
       <VideoCardSkeleton />
@@ -66,6 +132,7 @@ const HomeScreen: React.FC = () => {
       <VideoCardSkeleton />
     </>
   );
+
   if (loading && !refreshing) {
     return (
       <View style={styles.container}>
@@ -116,7 +183,16 @@ const HomeScreen: React.FC = () => {
             <Text style={styles.title}>YouTube</Text>
           </View>
         </SafeAreaView>
-        <ErrorMessage message={error} onRetry={execute} />
+        <ErrorMessage
+          message={error}
+          onRetry={() => {
+            if (selectedTag === "All") {
+              loadTrendingVideos();
+            } else {
+              loadVideosByTag(selectedTag);
+            }
+          }}
+        />
       </View>
     );
   }
@@ -158,21 +234,21 @@ const HomeScreen: React.FC = () => {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryContainer}
+          contentContainerStyle={styles.TagContainer}
         >
-          {CATEGORIES.map((item) => (
+          {TAGS.map((item) => (
             <TouchableOpacity
               key={item.id}
               style={[
-                styles.categoryItem,
-                selectedCategory === item.title && styles.categoryItemActive,
+                styles.TagItem,
+                selectedTag === item.title && styles.TagItemActive,
               ]}
-              onPress={() => setSelectedCategory(item.title)}
+              onPress={() => handleTagPress(item)}
             >
               <Text
                 style={[
-                  styles.categoryText,
-                  selectedCategory === item.title && styles.categoryTextActive,
+                  styles.TagText,
+                  selectedTag === item.title && styles.TagTextActive,
                 ]}
               >
                 {item.title}
@@ -192,6 +268,7 @@ const HomeScreen: React.FC = () => {
             channelTitle={item.channelTitle}
             channelId={item.channelId}
             viewCount={item.viewCount}
+            lengthText={item.lengthText}
             publishedTimeText={item.publishedTimeText}
             thumbnail={item.thumbnail?.[2]?.url || ""}
             channelThumbnail={item.channelAvatar?.[0]?.url || ""}
@@ -235,6 +312,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     backgroundColor: "#0f0f0f",
+    marginTop: 15,
   },
   leftSection: {
     flexDirection: "row",
@@ -267,25 +345,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#272727",
   },
-  categoryContainer: {
+  TagContainer: {
     paddingHorizontal: 12,
     gap: 8,
   },
-  categoryItem: {
+  TagItem: {
     backgroundColor: "#272727",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  categoryItemActive: {
+  TagItemActive: {
     backgroundColor: "#f1f1f1",
   },
-  categoryText: {
+  TagText: {
     color: "#f1f1f1",
     fontSize: 14,
     fontWeight: "500",
   },
-  categoryTextActive: {
+  TagTextActive: {
     color: "#0f0f0f",
   },
   skeletonContainer: {

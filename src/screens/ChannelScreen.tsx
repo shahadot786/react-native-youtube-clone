@@ -1,15 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import React, { useEffect, useState } from "react";
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -19,15 +14,47 @@ import {
 } from "../api/api-client";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingScreen } from "../components/LoadingScreen";
+import { formatNumber } from "../utils/format";
+
+interface ImageUrl {
+  url: string;
+}
+
+interface ChannelMeta {
+  channelId: string;
+  title: string;
+  description: string;
+  avatar: ImageUrl[];
+  banner: ImageUrl[];
+  channelHandle: string;
+  subscriberCountText: string;
+  videosCountText: string;
+}
 
 interface ChannelDetails {
   channelId: string;
   title: string;
-  avatar: { url: string }[];
-  banner: { url: string }[];
+  avatar: ImageUrl[];
+  banner: ImageUrl[];
   subscriberCountText: string;
   videosCountText: string;
   description: string;
+  meta: ChannelMeta;
+}
+
+interface Video {
+  videoId: string;
+  title: string;
+  thumbnail: ImageUrl[];
+  viewCount: number;
+  publishedTimeText: string;
+}
+
+interface Playlist {
+  playlistId: string;
+  title: string;
+  thumbnail: ImageUrl[];
+  videoCount: number;
 }
 
 const ChannelScreen: React.FC = () => {
@@ -38,8 +65,8 @@ const ChannelScreen: React.FC = () => {
   const [channelDetails, setChannelDetails] = useState<ChannelDetails | null>(
     null
   );
-  const [videos, setVideos] = useState<any[]>([]);
-  const [playlists, setPlaylists] = useState<any[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"videos" | "playlists">("videos");
@@ -75,62 +102,31 @@ const ChannelScreen: React.FC = () => {
       }
     } catch (err) {
       setError("An unexpected error occurred");
-      console.error("Error fetching channel data:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatNumber = (num: string): string => {
-    const match = num.match(/[\d.]+/);
-    if (!match) return num;
-    const number = parseFloat(match[0]);
-    if (num.includes("M")) return `${number}M`;
-    if (num.includes("K")) return `${number}K`;
-    return num;
-  };
+  const handleVideoPress = useCallback(
+    (videoId: string, channelId: string) => {
+      navigation.navigate("VideoDetails", { videoId, channelId });
+    },
+    [navigation]
+  );
 
-  const handleVideoPress = (videoId: string) => {
-    navigation.navigate("VideoDetails", { videoId });
-  };
+  const handleSubscribePress = useCallback(() => {
+    setIsSubscribed(!isSubscribed);
+  }, [isSubscribed]);
 
-  if (loading) {
-    return <LoadingScreen message="Loading channel..." />;
-  }
+  const renderHeader = useMemo(() => {
+    if (!channelDetails) return null;
 
-  if (error || !channelDetails) {
     return (
-      <ErrorMessage
-        message={error || "Channel not found"}
-        onRetry={fetchData}
-      />
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <SafeAreaView edges={["top"]} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color="white" />
-        </TouchableOpacity>
-        <View style={styles.headerRight}>
-          <TouchableOpacity>
-            <MaterialIcons name="cast" size={24} color="white" />
-          </TouchableOpacity>
-          <TouchableOpacity>
-            <Feather name="search" size={22} color="white" />
-          </TouchableOpacity>
-          <TouchableOpacity>
-            <Feather name="more-vertical" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <View>
         {/* Banner */}
-        {channelDetails.banner?.[0]?.url && (
+        {channelDetails.meta.banner?.[0]?.url && (
           <Image
-            source={{ uri: channelDetails.banner[0].url }}
+            source={{ uri: channelDetails.meta.banner[0].url }}
             style={styles.banner}
             resizeMode="cover"
           />
@@ -139,17 +135,17 @@ const ChannelScreen: React.FC = () => {
         {/* Channel Info */}
         <View style={styles.channelInfo}>
           <Image
-            source={{ uri: channelDetails.avatar?.[0]?.url || "" }}
+            source={{ uri: channelDetails.meta.avatar?.[1]?.url || "" }}
             style={styles.channelAvatar}
           />
-          <Text style={styles.channelName}>{channelDetails.title}</Text>
+          <Text style={styles.channelName}>{channelDetails.meta.title}</Text>
           <Text style={styles.channelStats}>
-            {channelDetails.subscriberCountText} •{" "}
-            {channelDetails.videosCountText}
+            {channelDetails.meta.subscriberCountText} •{" "}
+            {channelDetails.meta.videosCountText}
           </Text>
-          {channelDetails.description && (
+          {channelDetails.meta.description && (
             <Text style={styles.channelDescription} numberOfLines={2}>
-              {channelDetails.description}
+              {channelDetails.meta.description}
             </Text>
           )}
 
@@ -160,7 +156,7 @@ const ChannelScreen: React.FC = () => {
                 styles.subscribeBtn,
                 isSubscribed && styles.subscribedBtn,
               ]}
-              onPress={() => setIsSubscribed(!isSubscribed)}
+              onPress={handleSubscribePress}
             >
               <Text
                 style={[
@@ -211,81 +207,142 @@ const ChannelScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
         </View>
+      </View>
+    );
+  }, [channelDetails, activeTab, isSubscribed, handleSubscribePress]);
 
-        {/* Content */}
+  const renderVideoItem = useCallback(
+    ({ item: video }: { item: Video }) => (
+      <TouchableOpacity
+        style={styles.videoCard}
+        onPress={() =>
+          handleVideoPress(
+            video.videoId,
+            channelDetails?.meta.channelId || channelId
+          )
+        }
+      >
+        <Image
+          source={{ uri: video.thumbnail?.[0]?.url || "" }}
+          style={styles.videoThumbnail}
+        />
+        <View style={styles.videoInfo}>
+          <Text style={styles.videoTitle} numberOfLines={2}>
+            {video.title}
+          </Text>
+          <Text style={styles.videoMeta}>
+            {formatNumber(video.viewCount)} views • {video.publishedTimeText}
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.moreButton}>
+          <Feather name="more-vertical" size={18} color="white" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    ),
+    [channelDetails, channelId, handleVideoPress]
+  );
+
+  const renderPlaylistItem = useCallback(
+    ({ item: playlist }: { item: Playlist }) => (
+      <TouchableOpacity style={styles.playlistCard}>
+        <View style={styles.playlistThumbnailContainer}>
+          <Image
+            source={{ uri: playlist.thumbnail?.[0]?.url || "" }}
+            style={styles.playlistThumbnail}
+          />
+          <View style={styles.playlistOverlay}>
+            <MaterialIcons name="playlist-play" size={24} color="white" />
+            <Text style={styles.playlistCount}>{playlist.videoCount}</Text>
+          </View>
+        </View>
+        <Text style={styles.playlistTitle} numberOfLines={2}>
+          {playlist.title}
+        </Text>
+        <Text style={styles.playlistMeta}>View full playlist</Text>
+      </TouchableOpacity>
+    ),
+    []
+  );
+
+  const renderEmptyState = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
         {activeTab === "videos" ? (
-          <View style={styles.contentSection}>
-            {videos.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Feather name="video-off" size={48} color="#666" />
-                <Text style={styles.emptyText}>No videos available</Text>
-              </View>
-            ) : (
-              videos.map((video, index) => (
-                <TouchableOpacity
-                  key={`${video.videoId}-${index}`}
-                  style={styles.videoCard}
-                  onPress={() => handleVideoPress(video.videoId)}
-                >
-                  <Image
-                    source={{ uri: video.thumbnail?.[0]?.url || "" }}
-                    style={styles.videoThumbnail}
-                  />
-                  <View style={styles.videoInfo}>
-                    <Text style={styles.videoTitle} numberOfLines={2}>
-                      {video.title}
-                    </Text>
-                    <Text style={styles.videoMeta}>
-                      {formatNumber(video.viewCount)} views •{" "}
-                      {video.publishedTimeText}
-                    </Text>
-                  </View>
-                  <TouchableOpacity style={styles.moreButton}>
-                    <Feather name="more-vertical" size={18} color="white" />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
+          <>
+            <Feather name="video-off" size={48} color="#666" />
+            <Text style={styles.emptyText}>No videos available</Text>
+          </>
         ) : (
-          <View style={styles.contentSection}>
-            {playlists.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <MaterialIcons name="playlist-play" size={48} color="#666" />
-                <Text style={styles.emptyText}>No playlists available</Text>
-              </View>
-            ) : (
-              playlists.map((playlist, index) => (
-                <TouchableOpacity
-                  key={`${playlist.playlistId}-${index}`}
-                  style={styles.playlistCard}
-                >
-                  <View style={styles.playlistThumbnailContainer}>
-                    <Image
-                      source={{ uri: playlist.thumbnail?.[0]?.url || "" }}
-                      style={styles.playlistThumbnail}
-                    />
-                    <View style={styles.playlistOverlay}>
-                      <MaterialIcons
-                        name="playlist-play"
-                        size={24}
-                        color="white"
-                      />
-                      <Text style={styles.playlistCount}>
-                        {playlist.videoCount}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.playlistTitle} numberOfLines={2}>
-                    {playlist.title}
-                  </Text>
-                  <Text style={styles.playlistMeta}>View full playlist</Text>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
+          <>
+            <MaterialIcons name="playlist-play" size={48} color="#666" />
+            <Text style={styles.emptyText}>No playlists available</Text>
+          </>
         )}
-      </ScrollView>
+      </View>
+    ),
+    [activeTab]
+  );
+
+  const contentData = useMemo(() => {
+    return activeTab === "videos" ? videos : playlists;
+  }, [activeTab, videos, playlists]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: Video | Playlist }) => {
+      return activeTab === "videos"
+        ? renderVideoItem({ item: item as Video })
+        : renderPlaylistItem({ item: item as Playlist });
+    },
+    [activeTab, renderVideoItem, renderPlaylistItem]
+  );
+
+  if (loading) {
+    return <LoadingScreen message="Loading channel..." />;
+  }
+
+  if (error || !channelDetails) {
+    return (
+      <ErrorMessage
+        message={error || "Channel not found"}
+        onRetry={fetchData}
+      />
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <SafeAreaView edges={["top"]} style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={24} color="white" />
+        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity>
+            <MaterialIcons name="cast" size={24} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity>
+            <Feather name="search" size={22} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity>
+            <Feather name="more-vertical" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      <FlashList
+        data={contentData}
+        renderItem={renderItem}
+        keyExtractor={(item, index) => {
+          if (activeTab === "videos") {
+            return `${(item as Video).videoId}-${index}`;
+          }
+          return `${(item as Playlist).playlistId}-${index}`;
+        }}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmptyState}
+        contentContainerStyle={styles.flashListContent}
+        showsVerticalScrollIndicator={false}
+        ListFooterComponent={<View style={{ height: 100 }} />}
+      />
     </View>
   );
 };
@@ -304,6 +361,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     backgroundColor: "#0f0f0f",
+    marginTop: 15,
   },
   headerRight: {
     flexDirection: "row",
@@ -398,8 +456,9 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: "#f1f1f1",
   },
-  contentSection: {
-    padding: 12,
+  flashListContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   emptyContainer: {
     alignItems: "center",
@@ -413,6 +472,7 @@ const styles = StyleSheet.create({
   videoCard: {
     flexDirection: "row",
     marginBottom: 12,
+    paddingHorizontal: 4,
   },
   videoThumbnail: {
     width: 160,
@@ -441,6 +501,7 @@ const styles = StyleSheet.create({
   },
   playlistCard: {
     marginBottom: 16,
+    paddingHorizontal: 4,
   },
   playlistThumbnailContainer: {
     position: "relative",

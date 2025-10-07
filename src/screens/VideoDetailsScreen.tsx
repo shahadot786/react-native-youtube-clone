@@ -1,17 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
-import {
-  AntDesign,
-  Feather,
-  Ionicons,
-  MaterialIcons,
-} from "@expo/vector-icons";
+import { AntDesign, Feather, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Image,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -27,6 +24,7 @@ import {
 } from "../api/api-client";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingScreen } from "../components/LoadingScreen";
+import { YouTubePlayerComponent } from "../components/YoutubePlayer";
 import { formatDate, formatNumber } from "../utils/format";
 
 const { width } = Dimensions.get("window");
@@ -77,6 +75,7 @@ const VideoDetailsScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [activeTab, setActiveTab] = useState<"related" | "comments">("related");
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -123,16 +122,27 @@ const VideoDetailsScreen: React.FC = () => {
     if (videoDetails?.channelId) {
       navigation.navigate("Channel", { channelId: videoDetails?.channelId });
     }
+    setShowFullDescription(false);
   };
 
   const handleRelatedVideoPress = (
     relatedVideoId: string,
     channelId: string
   ) => {
+    setIsPlayerReady(false);
+    setShowFullDescription(false);
     navigation.navigate("VideoDetails", {
       videoId: relatedVideoId,
       channelId: channelId,
     });
+  };
+
+  const handlePlayerReady = () => {
+    setIsPlayerReady(true);
+  };
+
+  const handlePlayerError = (error: string) => {
+    Alert.alert("Player Error!", "Player is not ready, try again");
   };
 
   if (loading) {
@@ -145,13 +155,11 @@ const VideoDetailsScreen: React.FC = () => {
     );
   }
 
-  // console.log(JSON.stringify(videoDetails, null, 4), "videoDetails");
-  // console.log(JSON.stringify(relatedVideos, null, 4), "relatedVideos");
-  // console.log(JSON.stringify(comments, null, 4), "comments");
-  // console.log(JSON.stringify(channelDetails, null, 4), "channelDetails");
+  console.log(JSON.stringify(relatedVideos, null, 4));
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f0f0f" />
       <SafeAreaView edges={["top"]} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={24} color="white" />
@@ -167,15 +175,13 @@ const VideoDetailsScreen: React.FC = () => {
       </SafeAreaView>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Video Player Placeholder */}
+        {/* YouTube Video Player */}
         <View style={styles.videoPlayer}>
-          <View style={styles.videoBtn}>
-            <Ionicons name="play-circle" size={44} color="white" />
-          </View>
-          <Image
-            source={{ uri: videoDetails.thumbnail?.[5]?.url || "" }}
-            style={styles.thumbnail}
-            resizeMode="cover"
+          <YouTubePlayerComponent
+            videoId={videoId}
+            height={width * (9 / 16)}
+            onReady={handlePlayerReady}
+            onError={handlePlayerError}
           />
         </View>
 
@@ -287,7 +293,7 @@ const VideoDetailsScreen: React.FC = () => {
                 activeTab === "comments" && styles.tabTextActive,
               ]}
             >
-              Comments ({comments?.length})
+              Comments ({comments?.length || 0})
             </Text>
           </TouchableOpacity>
         </View>
@@ -295,43 +301,63 @@ const VideoDetailsScreen: React.FC = () => {
         {/* Related Videos */}
         {activeTab === "related" && (
           <View style={styles.relatedSection}>
-            {relatedVideos?.map((video, index) => (
-              <TouchableOpacity
-                key={`${video.videoId}-${index}`}
-                style={styles.relatedVideoCard}
-                onPress={() =>
-                  handleRelatedVideoPress(video.videoId, video.channelId)
-                }
-              >
-                <Image
-                  source={{ uri: video.thumbnail?.[0]?.url || "" }}
-                  style={styles.relatedThumbnail}
-                />
-                <View style={styles.relatedVideoInfo}>
-                  <Text style={styles.relatedVideoTitle} numberOfLines={2}>
-                    {video.title}
-                  </Text>
-                  <View style={{ flexDirection: "row", gap: 10 }}>
-                    <Image
-                      source={{ uri: video?.channelThumbnail?.[0]?.url || "" }}
-                      style={styles.channelRelatedAvatar}
-                    />
+            {relatedVideos?.length === 0 ? (
+              <View style={styles.noContentContainer}>
+                <Feather name="video" size={48} color="#666" />
+                <Text style={styles.noContentText}>
+                  No related videos available
+                </Text>
+              </View>
+            ) : (
+              relatedVideos
+                ?.filter(
+                  (v) => v.type !== "playlist" && v.type !== "shorts_listing"
+                )
+                ?.map((video, index) => (
+                  <TouchableOpacity
+                    key={`${video.videoId}-${index}`}
+                    style={styles.relatedVideoCard}
+                    onPress={() =>
+                      handleRelatedVideoPress(video.videoId, video.channelId)
+                    }
+                  >
                     <View>
-                      <Text style={styles.relatedVideoMeta}>
-                        {video.channelTitle}
+                      <Image
+                        source={{ uri: video?.thumbnail?.[0]?.url || "" }}
+                        style={styles.relatedThumbnail}
+                      />
+                      {video.lengthText ? (
+                        <Text style={styles.lengthText}>
+                          {video.lengthText}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.relatedVideoInfo}>
+                      <Text style={styles.relatedVideoTitle} numberOfLines={2}>
+                        {video.title}
                       </Text>
 
-                      <Text style={styles.relatedVideoMeta}>
-                        {video.viewCountText}
-                      </Text>
-                      <Text style={styles.relatedVideoMeta}>
-                        {video.publishedTimeText}
-                      </Text>
+                      <View style={styles.relatedChannelRow}>
+                        <Image
+                          source={{
+                            uri: video?.channelThumbnail?.[0]?.url || "",
+                          }}
+                          style={styles.channelRelatedAvatar}
+                        />
+                        <View style={styles.relatedMetaContainer}>
+                          <Text style={styles.relatedVideoMeta}>
+                            {video.channelTitle}
+                          </Text>
+                          <Text style={styles.relatedVideoMeta}>
+                            {video.viewCountText} • {video.publishedTimeText}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                  </TouchableOpacity>
+                ))
+            )}
           </View>
         )}
 
@@ -339,9 +365,9 @@ const VideoDetailsScreen: React.FC = () => {
         {activeTab === "comments" && (
           <View style={styles.commentsSection}>
             {comments?.length === 0 ? (
-              <View style={styles.noCommentsContainer}>
+              <View style={styles.noContentContainer}>
                 <Feather name="message-circle" size={48} color="#666" />
-                <Text style={styles.noCommentsText}>No comments available</Text>
+                <Text style={styles.noContentText}>No comments available</Text>
               </View>
             ) : (
               comments?.map((comment) => (
@@ -403,20 +429,6 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     backgroundColor: "#0f0f0f",
   },
-  thumbnail: {
-    width: "100%",
-    aspectRatio: 16 / 9,
-    backgroundColor: "#282828",
-  },
-  videoBtn: {
-    position: "absolute",
-    zIndex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    width: "100%",
-    height: "100%",
-    backgroundColor: "rgba(0,0,0,0.3)",
-  },
   headerRight: {
     flexDirection: "row",
     gap: 20,
@@ -425,13 +437,6 @@ const styles = StyleSheet.create({
     width: width,
     aspectRatio: 16 / 9,
     backgroundColor: "#000",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  videoIdText: {
-    color: "#666",
-    fontSize: 12,
-    marginTop: 8,
   },
   videoInfoSection: {
     padding: 12,
@@ -460,6 +465,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 8,
     gap: 6,
+  },
+  lengthText: {
+    color: "white",
+    position: "absolute",
+    bottom: 5,
+    right: 5,
+    backgroundColor: "#282828",
+    borderRadius: 2,
+    paddingHorizontal: 2,
+    fontSize: 12,
   },
   actionText: {
     color: "#f1f1f1",
@@ -576,6 +591,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 4,
   },
+  relatedChannelRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  relatedMetaContainer: {
+    flex: 1,
+  },
   relatedVideoMeta: {
     color: "#aaa",
     fontSize: 11,
@@ -584,11 +607,11 @@ const styles = StyleSheet.create({
   commentsSection: {
     padding: 12,
   },
-  noCommentsContainer: {
+  noContentContainer: {
     alignItems: "center",
     paddingVertical: 40,
   },
-  noCommentsText: {
+  noContentText: {
     color: "#666",
     fontSize: 14,
     marginTop: 12,
