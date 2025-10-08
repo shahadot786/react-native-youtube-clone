@@ -2,6 +2,8 @@
 
 A fully functional YouTube clone built with React Native, Expo, and TypeScript. Features include video browsing, search, channel viewing, and more.
 
+[![Watch the video](https://img.youtube.com/vi/vyh-vQa8KCA/hqdefault.jpg)](https://youtube.com/shorts/vyh-vQa8KCA)
+
 ## Features
 
 - ✅ Browse trending videos
