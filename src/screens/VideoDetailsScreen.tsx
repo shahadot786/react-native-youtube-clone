@@ -155,8 +155,6 @@ const VideoDetailsScreen: React.FC = () => {
     );
   }
 
-  console.log(JSON.stringify(relatedVideos, null, 4));
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0f0f0f" />

@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import {
   Image,
@@ -8,13 +9,26 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { formatNumber } from "../utils/format";
 
-interface HomeContentProps {
-  section: any;
+interface HomeSection {
+  type: string;
+  title?: string;
+  subtitle?: string;
+  data?: any[];
+  videoId?: string;
+  viewCount?: number | string;
+  publishedTimeText?: string;
+  description?: string;
 }
 
-const HomeContent: React.FC<HomeContentProps> = ({ section }) => {
-  // Don't render if section is missing
+interface HomeContentProps {
+  section: HomeSection;
+  channelId: string;
+}
+
+const HomeContent: React.FC<HomeContentProps> = ({ section, channelId }) => {
+  const navigation = useNavigation();
   if (!section || !section.type) {
     return null;
   }
@@ -32,72 +46,104 @@ const HomeContent: React.FC<HomeContentProps> = ({ section }) => {
     );
   };
 
-  // Render Video Item (for video_listing sections)
-  const renderVideoItem = ({ item }: { item: any }) => {
+  // Video Item Renderer
+  const renderVideoItem = (item: any, index: number) => {
+    if (!item || !item.videoId) return null;
+
+    const thumbnailUrl =
+      item.thumbnail?.[item.thumbnail.length - 1]?.url ||
+      item.thumbnail?.[0]?.url;
+    const videoId = item.videoId;
+
     return (
-      <TouchableOpacity style={styles.videoCard} activeOpacity={0.8}>
-        <Image
-          source={{
-            uri:
-              item.thumbnail?.[item.thumbnail.length - 1]?.url ||
-              item.thumbnail?.[0]?.url,
-          }}
-          style={styles.videoThumbnail}
-          resizeMode="cover"
-        />
-        {item.lengthText && (
-          <View style={styles.durationBadge}>
-            <Text style={styles.durationText}>{item.lengthText}</Text>
-          </View>
-        )}
+      <TouchableOpacity
+        key={`video-${videoId}-${index}`}
+        style={styles.videoCard}
+        activeOpacity={0.8}
+        onPress={() =>
+          navigation.navigate("VideoDetails", { videoId, channelId })
+        }
+      >
+        <View>
+          <Image
+            source={{ uri: thumbnailUrl || "" }}
+            style={styles.videoThumbnailContainer}
+            resizeMode="cover"
+          />
+          {item.lengthText && (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{item.lengthText}</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.videoInfo}>
           <Text style={styles.videoTitle} numberOfLines={2}>
-            {item.title}
+            {item.title.slice(0, 30) + "..."}
           </Text>
           <Text style={styles.videoMeta} numberOfLines={1}>
-            {item.viewCount} views • {item.publishedTimeText}
+            {item.viewCount
+              ? `${formatNumber(item.viewCount)} views`
+              : "No views"}{" "}
+            • {item.publishedTimeText || "Recently"}
           </Text>
         </View>
       </TouchableOpacity>
     );
   };
 
-  // Render Shorts Item (for shorts_listing sections)
+  // Shorts Item Renderer
   const renderShortsItem = (item: any, index: number) => {
+    if (!item || !item.videoId) return null;
+
+    const thumbnailUrl = item.thumbnail?.[0]?.url;
+    const videoId = item.videoId;
     return (
       <TouchableOpacity
-        key={index}
+        key={`short-${videoId}-${index}`}
         style={styles.shortsCard}
         activeOpacity={0.8}
+        onPress={() =>
+          navigation.navigate("VideoDetails", { videoId, channelId })
+        }
       >
-        <Image
-          source={{ uri: item.thumbnail?.[0]?.url }}
-          style={styles.shortsThumbnail}
-          resizeMode="cover"
-        />
-        <View style={styles.shortsOverlay}>
-          <MaterialIcons name="play-arrow" size={40} color="#fff" />
+        <View style={styles.shortsThumbnailContainer}>
+          <Image
+            source={{ uri: thumbnailUrl || "" }}
+            style={styles.shortsThumbnail}
+            resizeMode="cover"
+          />
+          <View style={styles.shortsOverlay}>
+            <MaterialIcons name="play-arrow" size={40} color="#fff" />
+          </View>
         </View>
         <View style={styles.shortsInfo}>
           <Text style={styles.shortsTitle} numberOfLines={2}>
             {item.title}
           </Text>
-          <Text style={styles.shortsViews}>{item.viewCountText}</Text>
+          {item.viewCountText && (
+            <Text style={styles.shortsViews}>{item.viewCountText}</Text>
+          )}
         </View>
       </TouchableOpacity>
     );
   };
 
-  // Render Channel Item (for channel_listing sections)
+  // Channel Item Renderer
   const renderChannelItem = (item: any, index: number) => {
+    if (!item || !item.title) return null;
+
+    const avatarUrl = item.thumbnail?.[0]?.url;
+    const channelId = item.channelId;
+
     return (
       <TouchableOpacity
-        key={index}
+        key={`channel-${item.channelId || index}`}
         style={styles.channelCard}
         activeOpacity={0.8}
+        onPress={() => navigation.navigate("Channel", { channelId: channelId })}
       >
         <Image
-          source={{ uri: item.thumbnail?.[1]?.url || item.thumbnail?.[0]?.url }}
+          source={{ uri: `https:${avatarUrl}` || "" }}
           style={styles.channelAvatar}
           resizeMode="cover"
         />
@@ -108,89 +154,122 @@ const HomeContent: React.FC<HomeContentProps> = ({ section }) => {
           <Text style={styles.channelMeta} numberOfLines={1}>
             {item.subscriberCount}
           </Text>
-          <Text style={styles.channelVideos} numberOfLines={1}>
-            {item.videoCount} videos
-          </Text>
+          {item.videoCount && (
+            <Text style={styles.channelVideos} numberOfLines={1}>
+              {item.videoCount} videos
+            </Text>
+          )}
         </View>
       </TouchableOpacity>
     );
   };
 
-  // Render Post Item (for post_listing sections)
+  // Post Item Renderer
   const renderPostItem = (item: any, index: number) => {
+    if (!item || !item.contentText) return null;
+
+    const authorAvatarUrl = item.authorThumbnail?.[0]?.url;
+    const cleanUrl = item.attachment.image?.[0]?.url.split("=")[0];
     return (
-      <View key={index} style={styles.postCard}>
+      <View key={`post-${index}`} style={styles.postCard}>
         <View style={styles.postHeader}>
-          <Image
-            source={{ uri: item.authorThumbnail?.[0]?.url }}
-            style={styles.postAvatar}
-          />
+          {authorAvatarUrl && (
+            <Image
+              source={{ uri: `https:${authorAvatarUrl}` }}
+              style={styles.postAvatar}
+              resizeMode="cover"
+            />
+          )}
           <View style={styles.postAuthorInfo}>
-            <Text style={styles.postAuthor}>{item.authorText}</Text>
-            <Text style={styles.postTime}>{item.publishedTimeText}</Text>
+            <Text style={styles.postAuthor} numberOfLines={1}>
+              {item.authorText}
+            </Text>
+            <Text style={styles.postTime}>
+              {item.publishedTimeText || "Recently"}
+            </Text>
           </View>
         </View>
+
         <Text style={styles.postContent} numberOfLines={6}>
           {item.contentText}
         </Text>
-        {item.attachment?.type === "image" && item.attachment.image && (
-          <Image
-            source={{
-              uri:
-                item.attachment.image[2]?.url || item.attachment.image[0]?.url,
-            }}
-            style={styles.postImage}
-            resizeMode="cover"
-          />
-        )}
-        {item.attachment?.type === "poll" && (
+
+        {item.attachment?.type === "image" &&
+          item.attachment?.image?.length > 0 && (
+            <Image
+              source={{
+                uri: cleanUrl || "",
+              }}
+              style={styles.postImage}
+              resizeMode="cover"
+            />
+          )}
+
+        {item.attachment?.type === "poll" && item.attachment?.choices && (
           <View style={styles.pollContainer}>
-            {item.attachment.choices?.map((choice: string, idx: number) => (
-              <TouchableOpacity key={idx} style={styles.pollOption}>
+            {item.attachment.choices.map((choice: string, idx: number) => (
+              <TouchableOpacity key={`poll-${idx}`} style={styles.pollOption}>
                 <Text style={styles.pollOptionText} numberOfLines={2}>
                   {choice}
                 </Text>
               </TouchableOpacity>
             ))}
-            <Text style={styles.pollVotes}>{item.attachment.totalVotes}</Text>
+            {item.attachment.totalVotes && (
+              <Text style={styles.pollVotes}>{item.attachment.totalVotes}</Text>
+            )}
           </View>
         )}
+
         <View style={styles.postFooter}>
-          <View style={styles.postStats}>
-            <MaterialIcons name="thumb-up" size={16} color="#666" />
-            <Text style={styles.postStatText}>{item.voteCountText}</Text>
-          </View>
-          <View style={styles.postStats}>
-            <MaterialIcons name="comment" size={16} color="#666" />
-            <Text style={styles.postStatText}>{item.replyCount} replies</Text>
-          </View>
+          {item.voteCountText && (
+            <View style={styles.postStats}>
+              <MaterialIcons name="thumb-up" size={16} color="#666" />
+              <Text style={styles.postStatText}>{item.voteCountText}</Text>
+            </View>
+          )}
+          {item.replyCount !== undefined && (
+            <View style={styles.postStats}>
+              <MaterialIcons name="comment" size={16} color="#666" />
+              <Text style={styles.postStatText}>{item.replyCount} replies</Text>
+            </View>
+          )}
         </View>
       </View>
     );
   };
 
-  // Render Player Section (single featured video)
+  // Player Section (Featured Video)
   if (section.type === "player") {
+    if (!section.videoId) return null;
+    const videoId = section.videoId;
+
     return (
       <View style={styles.playerContainer}>
-        <TouchableOpacity style={styles.playerCard} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.playerCard}
+          activeOpacity={0.8}
+          onPress={() =>
+            navigation.navigate("VideoDetails", { videoId, channelId })
+          }
+        >
           <Image
             source={{
-              uri: `https://i.ytimg.com/vi/${section.videoId}/maxresdefault.jpg`,
+              uri: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
             }}
             style={styles.playerThumbnail}
             resizeMode="cover"
           />
-          <View style={styles.playerOverlay}>
+          {/* <View style={styles.playerOverlay}>
             <MaterialIcons name="play-circle-filled" size={64} color="#fff" />
-          </View>
+          </View> */}
         </TouchableOpacity>
         <View style={styles.playerInfo}>
           <Text style={styles.playerTitle} numberOfLines={2}>
             {section.title}
           </Text>
           <Text style={styles.playerMeta}>
-            {section.viewCount} views • {section.publishedTimeText}
+            {formatNumber(section.viewCount as number) || "0"} views •{" "}
+            {section.publishedTimeText}
           </Text>
           {section.description && (
             <Text style={styles.playerDescription} numberOfLines={3}>
@@ -202,26 +281,23 @@ const HomeContent: React.FC<HomeContentProps> = ({ section }) => {
     );
   }
 
-  // Render Video Listing (vertical list of videos)
+  // Video Listing (Vertical List)
   if (section.type === "video_listing") {
-    // Don't render if no data
-    if (!section.data || section.data.length === 0) {
+    if (!Array.isArray(section.data) || section.data.length === 0) {
       return null;
     }
 
     return (
       <View style={styles.listingContainer}>
         {renderSectionHeader()}
-        {section.data.map((item: any, index: number) => (
-          <View key={index}>{renderVideoItem({ item })}</View>
-        ))}
+        {section.data.map((item, index) => renderVideoItem(item, index))}
       </View>
     );
   }
 
-  // Render Shorts Listing (horizontal scrollable shorts)
+  // Shorts Listing (Horizontal Scrollable)
   if (section.type === "shorts_listing") {
-    if (!section.data || section.data.length === 0) {
+    if (!Array.isArray(section.data) || section.data.length === 0) {
       return null;
     }
 
@@ -232,18 +308,17 @@ const HomeContent: React.FC<HomeContentProps> = ({ section }) => {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
+          scrollEventThrottle={16}
         >
-          {section.data.map((item: any, index: number) =>
-            renderShortsItem(item, index)
-          )}
+          {section.data.map((item, index) => renderShortsItem(item, index))}
         </ScrollView>
       </View>
     );
   }
 
-  // Render Channel Listing (horizontal scrollable channels)
+  // Channel Listing (Horizontal Scrollable)
   if (section.type === "channel_listing") {
-    if (!section.data || section.data.length === 0) {
+    if (!Array.isArray(section.data) || section.data.length === 0) {
       return null;
     }
 
@@ -254,32 +329,29 @@ const HomeContent: React.FC<HomeContentProps> = ({ section }) => {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
+          scrollEventThrottle={16}
         >
-          {section.data.map((item: any, index: number) =>
-            renderChannelItem(item, index)
-          )}
+          {section.data.map((item, index) => renderChannelItem(item, index))}
         </ScrollView>
       </View>
     );
   }
 
-  // Render Post Listing (vertical scrollable posts)
+  // Post Listing (Vertical List)
   if (section.type === "post_listing") {
-    if (!section.data || section.data.length === 0) {
+    if (!Array.isArray(section.data) || section.data.length === 0) {
       return null;
     }
 
     return (
       <View style={styles.listingContainer}>
         {renderSectionHeader()}
-        {section.data.map((item: any, index: number) =>
-          renderPostItem(item, index)
-        )}
+        {section.data.map((item, index) => renderPostItem(item, index))}
       </View>
     );
   }
 
-  // Unknown section type - don't render
+  // Unknown section type
   return null;
 };
 
@@ -303,18 +375,19 @@ const styles = StyleSheet.create({
     color: "#aaa",
   },
 
-  // Player Section (Featured Video)
+  // Player Section
   playerContainer: {
-    marginBottom: 24,
+    // marginBottom: 15,
+    backgroundColor: "#0f0f0f",
   },
   playerCard: {
-    backgroundColor: "#000",
     position: "relative",
+    backgroundColor: "#000",
   },
   playerThumbnail: {
     width: "100%",
-    height: 220,
-    backgroundColor: "#000",
+    height: 180,
+    backgroundColor: "#282828",
   },
   playerOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -327,35 +400,44 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f0f0f",
   },
   playerTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: "#fff",
-    marginBottom: 8,
+    marginBottom: 4,
+    lineHeight: 18,
   },
   playerMeta: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#aaa",
-    marginBottom: 8,
+    marginBottom: 4,
+    fontWeight: "500",
   },
   playerDescription: {
-    fontSize: 13,
+    fontSize: 11,
     color: "#ccc",
-    lineHeight: 18,
+    lineHeight: 14,
   },
 
   // Video Card
   videoCard: {
-    backgroundColor: "#0f0f0f",
-    marginBottom: 16,
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  videoThumbnailContainer: {
+    width: 160,
+    aspectRatio: 16 / 9,
+    borderRadius: 8,
+    backgroundColor: "#282828",
   },
   videoThumbnail: {
     width: "100%",
     height: 210,
-    backgroundColor: "#000",
+    backgroundColor: "#282828",
+    borderRadius: 8,
   },
   durationBadge: {
     position: "absolute",
-    top: 180,
+    bottom: 8,
     right: 8,
     backgroundColor: "rgba(0, 0, 0, 0.85)",
     paddingHorizontal: 6,
@@ -368,18 +450,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   videoInfo: {
-    padding: 12,
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: "flex-start",
   },
   videoTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 6,
-    lineHeight: 20,
+    color: "#f1f1f1",
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+    marginBottom: 4,
   },
   videoMeta: {
-    fontSize: 13,
     color: "#aaa",
+    fontSize: 11,
+    lineHeight: 16,
   },
 
   // Shorts Card
@@ -390,10 +475,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
   },
+  shortsThumbnailContainer: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 12,
+  },
   shortsThumbnail: {
     width: 150,
     height: 265,
-    backgroundColor: "#000",
+    backgroundColor: "#282828",
+    borderRadius: 12,
   },
   shortsOverlay: {
     position: "absolute",
@@ -406,7 +497,7 @@ const styles = StyleSheet.create({
   },
   shortsTitle: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#fff",
     marginBottom: 4,
     lineHeight: 17,
@@ -414,6 +505,7 @@ const styles = StyleSheet.create({
   shortsViews: {
     fontSize: 12,
     color: "#aaa",
+    fontWeight: "500",
   },
 
   // Channel Card
@@ -429,7 +521,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#000",
+    backgroundColor: "#282828",
     marginBottom: 12,
   },
   channelInfo: {
@@ -438,7 +530,7 @@ const styles = StyleSheet.create({
   },
   channelTitle: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#fff",
     marginBottom: 4,
     textAlign: "center",
@@ -447,10 +539,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#aaa",
     marginBottom: 2,
+    fontWeight: "500",
   },
   channelVideos: {
     fontSize: 12,
     color: "#aaa",
+    fontWeight: "500",
   },
 
   // Post Card
@@ -458,7 +552,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f0f0f",
     marginHorizontal: 16,
     marginBottom: 16,
-    borderRadius: 0,
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#1f1f1f",
@@ -472,7 +565,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#000",
+    backgroundColor: "#282828",
     marginRight: 12,
   },
   postAuthorInfo: {
@@ -480,13 +573,14 @@ const styles = StyleSheet.create({
   },
   postAuthor: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#fff",
     marginBottom: 2,
   },
   postTime: {
     fontSize: 12,
     color: "#aaa",
+    fontWeight: "500",
   },
   postContent: {
     fontSize: 14,
@@ -498,7 +592,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 280,
     borderRadius: 8,
-    backgroundColor: "#000",
+    backgroundColor: "#282828",
     marginBottom: 12,
   },
   pollContainer: {
@@ -515,11 +609,13 @@ const styles = StyleSheet.create({
   pollOptionText: {
     fontSize: 14,
     color: "#fff",
+    fontWeight: "500",
   },
   pollVotes: {
     fontSize: 12,
     color: "#aaa",
     marginTop: 4,
+    fontWeight: "500",
   },
   postFooter: {
     flexDirection: "row",
@@ -537,6 +633,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#aaa",
     marginLeft: 6,
+    fontWeight: "500",
   },
 
   // Listing Containers

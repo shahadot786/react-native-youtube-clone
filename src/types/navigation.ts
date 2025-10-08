@@ -9,7 +9,7 @@ export type RootStackParamList = {
   };
   Channel: { channelId: string };
   Search: undefined;
-  PlaylistDetails: undefined;
+  PlaylistDetails: { playlistId: string };
 };
 
 declare global {

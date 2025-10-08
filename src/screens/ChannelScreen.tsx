@@ -1,13 +1,16 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -30,6 +33,7 @@ import { formatNumber } from "../utils/format";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
+// Types
 interface ImageUrl {
   url: string;
 }
@@ -62,6 +66,7 @@ interface Video {
   thumbnail: ImageUrl[];
   viewCount: number;
   publishedTimeText: string;
+  lengthText: string;
 }
 
 interface Playlist {
@@ -78,20 +83,35 @@ interface Short {
   viewCount?: number;
 }
 
+interface HomeSection {
+  type: string;
+  title?: string;
+  subtitle?: string;
+  data?: any[];
+  videoId?: string;
+  viewCount?: number;
+  publishedTimeText?: string;
+  description?: string;
+}
+
 type TabType = "home" | "videos" | "shorts" | "playlists" | "about";
+
+const TABS: TabType[] = ["home", "videos", "shorts", "playlists", "about"];
+const HEADER_HEIGHT = 250; // Channel info header height
 
 const ChannelScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { channelId } = route.params as { channelId: string };
+  const { channelId } = (route.params as { channelId?: string }) || {};
 
+  // State management
   const [channelDetails, setChannelDetails] = useState<ChannelDetails | null>(
     null
   );
   const [videos, setVideos] = useState<Video[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [shorts, setShorts] = useState<Short[]>([]);
-  const [homeContent, setHomeContent] = useState<any[]>([]);
+  const [homeContent, setHomeContent] = useState<HomeSection[]>([]);
   const [aboutData, setAboutData] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
@@ -99,76 +119,97 @@ const ChannelScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isTabsFixed, setIsTabsFixed] = useState(false);
 
+  // Animated values
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Effects
   useEffect(() => {
-    fetchInitialData();
+    if (channelId) {
+      fetchInitialData();
+    }
   }, [channelId]);
 
   useEffect(() => {
     fetchTabData();
-  }, [activeTab]);
+  }, [activeTab, channelId]);
 
+  // API Calls
   const fetchInitialData = async () => {
     try {
       setLoading(true);
       setError(null);
 
+      if (!channelId) {
+        setError("Channel ID is missing");
+        return;
+      }
+
       const detailsResult = await fetchChannelDetails(channelId);
 
-      if (detailsResult.isError) {
+      if (detailsResult?.isError) {
         setError(detailsResult.error || "Failed to load channel");
-      } else {
+      } else if (detailsResult?.data) {
         setChannelDetails(detailsResult.data);
       }
     } catch (err) {
       setError("An unexpected error occurred");
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchTabData = async () => {
-    if (!channelDetails) return;
+    if (!channelId) return;
 
     try {
       setTabLoading(true);
 
       switch (activeTab) {
-        case "home":
+        case "home": {
           const homeResult = await fetchChannelHome(channelId);
-          // console.log(JSON.stringify(homeResult.data, null, 4), "home");
-          if (!homeResult.isError) {
-            setHomeContent(homeResult.data || []);
+          if (!homeResult?.isError && Array.isArray(homeResult?.data)) {
+            setHomeContent(homeResult.data);
           }
           break;
+        }
 
-        case "videos":
+        case "videos": {
           const videosResult = await fetchChannelVideos(channelId);
-          if (!videosResult.isError) {
-            setVideos(videosResult.data || []);
+          if (!videosResult?.isError && Array.isArray(videosResult?.data)) {
+            setVideos(videosResult.data);
           }
           break;
+        }
 
-        case "shorts":
+        case "shorts": {
           const shortsResult = await fetchShortsVideos(channelId);
-          if (!shortsResult.isError) {
-            setShorts(shortsResult.data || []);
+          if (!shortsResult?.isError && Array.isArray(shortsResult?.data)) {
+            setShorts(shortsResult.data);
           }
           break;
+        }
 
-        case "playlists":
+        case "playlists": {
           const playlistsResult = await fetchChannelPlaylists(channelId);
-          if (!playlistsResult.isError) {
-            setPlaylists(playlistsResult.data || []);
+          if (
+            !playlistsResult?.isError &&
+            Array.isArray(playlistsResult?.data)
+          ) {
+            setPlaylists(playlistsResult.data);
           }
           break;
+        }
 
-        case "about":
+        case "about": {
           const aboutResult = await fetchChannelAbout(channelId);
-          if (!aboutResult.isError) {
+          if (!aboutResult?.isError && aboutResult?.data) {
             setAboutData(aboutResult.data);
           }
           break;
+        }
       }
     } catch (err) {
       console.error("Error fetching tab data:", err);
@@ -177,51 +218,70 @@ const ChannelScreen: React.FC = () => {
     }
   };
 
-  const handleVideoPress = useCallback(
-    (videoId: string) => {
-      navigation.navigate("VideoDetails", { videoId, channelId });
-    },
-    [navigation, channelId]
-  );
+  // Handlers
+  const handleVideoPress = useCallback((videoId: string, channelId: string) => {
+    navigation.navigate("VideoDetails", { videoId, channelId });
+  }, []);
+
+  const handlePlaylistPress = useCallback((playlistId: string) => {
+    navigation.navigate("PlaylistDetails", { playlistId });
+  }, []);
 
   const handleSubscribePress = useCallback(() => {
-    setIsSubscribed(!isSubscribed);
-  }, [isSubscribed]);
+    setIsSubscribed((prev) => !prev);
+  }, []);
 
   const handleTabPress = useCallback((tab: TabType) => {
     setActiveTab(tab);
   }, []);
 
-  const renderHeader = useMemo(() => {
-    if (!channelDetails) return null;
+  const handleGoBack = useCallback(() => {
+    navigation.goBack();
+  }, []);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const scrollPosition = event.nativeEvent.contentOffset.y;
+    setIsTabsFixed(scrollPosition >= HEADER_HEIGHT);
+    scrollY.setValue(scrollPosition);
+  };
+
+  // Render Methods
+  const renderChannelHeader = useCallback(() => {
+    if (!channelDetails?.meta) return null;
+
+    const { meta } = channelDetails;
+    const bannerUrl = meta.banner?.[0]?.url;
+    const avatarUrl = meta.avatar?.[1]?.url || meta.avatar?.[0]?.url;
 
     return (
-      <View>
-        {/* Banner */}
-        {channelDetails.meta.banner?.[0]?.url && (
+      <View style={styles.headerContainer}>
+        {bannerUrl && (
           <Image
-            source={{ uri: channelDetails.meta.banner[0].url }}
+            source={{ uri: bannerUrl }}
             style={styles.banner}
             resizeMode="cover"
           />
         )}
 
-        {/* Channel Info */}
-        <View style={styles.channelInfo}>
-          <Image
-            source={{ uri: channelDetails.meta.avatar?.[1]?.url || "" }}
-            style={styles.channelAvatar}
-          />
-          <Text style={styles.channelName}>{channelDetails.meta.title}</Text>
-          <Text style={styles.channelHandle}>
-            {channelDetails.meta.channelHandle}
-          </Text>
+        <View style={styles.channelInfoSection}>
+          {avatarUrl && (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.channelAvatar}
+              resizeMode="cover"
+            />
+          )}
+
+          <Text style={styles.channelName}>{meta.title}</Text>
+
+          {meta.channelHandle && (
+            <Text style={styles.channelHandle}>{meta.channelHandle}</Text>
+          )}
+
           <Text style={styles.channelStats}>
-            {channelDetails.meta.subscriberCountText} •{" "}
-            {channelDetails.meta.videosCountText}
+            {meta.subscriberCountText} • {meta.videosCountText}
           </Text>
 
-          {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[
@@ -229,6 +289,7 @@ const ChannelScreen: React.FC = () => {
                 isSubscribed && styles.subscribedBtn,
               ]}
               onPress={handleSubscribePress}
+              activeOpacity={0.7}
             >
               <Text
                 style={[
@@ -239,91 +300,99 @@ const ChannelScreen: React.FC = () => {
                 {isSubscribed ? "Subscribed" : "Subscribe"}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
+
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
               <Feather name="bell" size={20} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
+
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
               <Feather name="share-2" size={20} color="white" />
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Tabs */}
-        <View style={styles.tabsContainer}>
-          {(
-            ["home", "videos", "shorts", "playlists", "about"] as TabType[]
-          ).map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              onPress={() => handleTabPress(tab)}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
-                ]}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
       </View>
     );
-  }, [
-    channelDetails,
-    activeTab,
-    isSubscribed,
-    handleSubscribePress,
-    handleTabPress,
-  ]);
+  }, [channelDetails, isSubscribed, handleSubscribePress]);
+
+  const renderTabs = useCallback(() => {
+    return (
+      <View style={styles.tabsContainer}>
+        {TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.tabActive]}
+            onPress={() => handleTabPress(tab)}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab && styles.tabTextActive,
+              ]}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  }, [activeTab, handleTabPress]);
 
   const renderVideoItem = useCallback(
-    ({ item: video }: { item: Video }) => (
+    (item: Video, index: number) => (
       <TouchableOpacity
+        key={`video-${item.videoId}-${index}`}
         style={styles.videoCard}
-        onPress={() => handleVideoPress(video.videoId)}
+        onPress={() => handleVideoPress(item.videoId, channelId as string)}
+        activeOpacity={0.7}
       >
-        <Image
-          source={{ uri: video.thumbnail?.[0]?.url || "" }}
-          style={styles.videoThumbnail}
-        />
+        <View>
+          <Image
+            source={{ uri: item.thumbnail?.[0]?.url || "" }}
+            style={styles.videoThumbnail}
+            resizeMode="cover"
+          />
+          {item.lengthText && (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{item.lengthText}</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.videoInfo}>
           <Text style={styles.videoTitle} numberOfLines={2}>
-            {video.title}
+            {item.title}
           </Text>
           <Text style={styles.videoMeta}>
-            {formatNumber(video.viewCount)} views • {video.publishedTimeText}
+            {formatNumber(item.viewCount)} views • {item.publishedTimeText}
           </Text>
         </View>
-        <TouchableOpacity style={styles.moreButton}>
-          <Feather name="more-vertical" size={18} color="white" />
-        </TouchableOpacity>
       </TouchableOpacity>
     ),
     [handleVideoPress]
   );
 
   const renderShortItem = useCallback(
-    ({ item: short }: { item: Short }) => (
+    (item: Short, index: number) => (
       <TouchableOpacity
+        key={`short-${item.videoId}-${index}`}
         style={styles.shortCard}
-        onPress={() => handleVideoPress(short.videoId)}
+        onPress={() => handleVideoPress(item.videoId, channelId as string)}
+        activeOpacity={0.7}
       >
         <Image
-          source={{ uri: short.thumbnail?.[0]?.url || "" }}
+          source={{ uri: item.thumbnail?.[0]?.url || "" }}
           style={styles.shortThumbnail}
+          resizeMode="cover"
         />
         <View style={styles.shortOverlay}>
           <MaterialIcons name="play-arrow" size={32} color="white" />
         </View>
         <Text style={styles.shortTitle} numberOfLines={2}>
-          {short.title}
+          {item.title}
         </Text>
-        {short.viewCount && (
+        {item.viewCount !== undefined && (
           <Text style={styles.shortViews}>
-            {formatNumber(short.viewCount)} views
+            {formatNumber(item.viewCount)} views
           </Text>
         )}
       </TouchableOpacity>
@@ -331,40 +400,35 @@ const ChannelScreen: React.FC = () => {
     [handleVideoPress]
   );
 
-  const handlePlaylistPress = useCallback(
-    (playlistId: string) => {
-      navigation.navigate("PlaylistDetails", { playlistId });
-    },
-    [navigation]
-  );
-
   const renderPlaylistItem = useCallback(
-    ({ item: playlist }: { item: Playlist }) => (
+    (item: Playlist, index: number) => (
       <TouchableOpacity
+        key={`playlist-${item.playlistId}-${index}`}
         style={styles.playlistCard}
-        onPress={() => handlePlaylistPress(playlist.playlistId)}
+        onPress={() => handlePlaylistPress(item.playlistId)}
+        activeOpacity={0.7}
       >
         <View style={styles.playlistThumbnailContainer}>
           <Image
-            source={{ uri: playlist.thumbnail?.[0]?.url || "" }}
+            source={{ uri: item.thumbnail?.[0]?.url || "" }}
             style={styles.playlistThumbnail}
+            resizeMode="cover"
           />
           <View style={styles.playlistOverlay}>
             <MaterialIcons name="playlist-play" size={24} color="white" />
-            <Text style={styles.playlistCount}>{playlist.videoCount}</Text>
+            <Text style={styles.playlistCount}>{item.videoCount}</Text>
           </View>
         </View>
         <Text style={styles.playlistTitle} numberOfLines={2}>
-          {playlist.title}
+          {item.title}
         </Text>
-        <Text style={styles.playlistMeta}>View full playlist</Text>
       </TouchableOpacity>
     ),
     [handlePlaylistPress]
   );
 
-  const renderAboutSection = useCallback(() => {
-    if (!aboutData && !channelDetails) return null;
+  const renderAboutContent = useCallback(() => {
+    if (!channelDetails?.meta) return null;
 
     const data = aboutData || channelDetails.meta;
 
@@ -387,81 +451,144 @@ const ChannelScreen: React.FC = () => {
 
         {data.channelHandle && (
           <View style={styles.aboutSection}>
-            <Text style={styles.aboutLabel}>Links</Text>
+            <Text style={styles.aboutLabel}>Handle</Text>
             <Text style={styles.aboutLink}>{data.channelHandle}</Text>
           </View>
         )}
       </View>
     );
-  }, [aboutData, channelDetails]);
+  }, [channelDetails, aboutData]);
 
-  const renderEmptyState = useCallback(() => {
-    const emptyStates = {
-      videos: { icon: "video-off", text: "No videos available" },
-      shorts: { icon: "video-off", text: "No shorts available" },
-      playlists: { icon: "playlist-play", text: "No playlists available" },
-      home: { icon: "home", text: "No content available" },
-      about: { icon: "info", text: "No information available" },
-    };
-
-    const state = emptyStates[activeTab];
-
+  const renderEmptyState = useCallback((message: string) => {
     return (
       <View style={styles.emptyContainer}>
-        {activeTab === "playlists" ? (
-          <MaterialIcons name={state.icon as any} size={48} color="#666" />
-        ) : (
-          <Feather name={state.icon as any} size={48} color="#666" />
-        )}
-        <Text style={styles.emptyText}>{state.text}</Text>
+        <MaterialIcons name="inbox" size={48} color="#666" />
+        <Text style={styles.emptyText}>{message}</Text>
       </View>
     );
-  }, [activeTab]);
+  }, []);
 
-  const getContentData = useMemo(() => {
-    switch (activeTab) {
-      case "videos":
-        return videos;
-      case "shorts":
-        return shorts;
-      case "playlists":
-        return playlists;
-      default:
-        return [];
+  const renderTabContent = useCallback(() => {
+    if (tabLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ff0000" />
+        </View>
+      );
     }
-  }, [activeTab, videos, shorts, playlists]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: any }) => {
-      switch (activeTab) {
-        case "videos":
-          return renderVideoItem({ item });
-        case "shorts":
-          return renderShortItem({ item });
-        case "playlists":
-          return renderPlaylistItem({ item });
-        default:
-          return null;
-      }
-    },
-    [activeTab, renderVideoItem, renderShortItem, renderPlaylistItem]
-  );
+    switch (activeTab) {
+      case "home":
+        return (
+          <ScrollView
+            style={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={handleScroll}
+          >
+            {homeContent && homeContent.length > 0
+              ? homeContent.map((section, index) => (
+                  <HomeContent
+                    key={`home-${index}`}
+                    section={section}
+                    channelId={channelId ?? ""}
+                  />
+                ))
+              : renderEmptyState("No content available")}
+            <View style={styles.bottomPadding} />
+          </ScrollView>
+        );
 
-  const getKeyExtractor = useCallback(
-    (item: any, index: number) => {
-      if (activeTab === "videos") return `video-${item.videoId}-${index}`;
-      if (activeTab === "shorts") return `short-${item.videoId}-${index}`;
-      if (activeTab === "playlists")
-        return `playlist-${item.playlistId}-${index}`;
-      return `item-${index}`;
-    },
-    [activeTab]
-  );
+      case "videos":
+        return (
+          <FlashList
+            data={videos}
+            renderItem={({ item, index }) => renderVideoItem(item, index || 0)}
+            keyExtractor={(item, index) => `video-${item.videoId}-${index}`}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.flashListContent}
+            ListEmptyComponent={() => renderEmptyState("No videos available")}
+            scrollEventThrottle={16}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false, listener: handleScroll }
+            )}
+          />
+        );
 
+      case "shorts":
+        return (
+          <FlashList
+            data={shorts}
+            renderItem={({ item, index }) => renderShortItem(item, index || 0)}
+            keyExtractor={(item, index) => `short-${item.videoId}-${index}`}
+            numColumns={3}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.shortsListContent}
+            ListEmptyComponent={() => renderEmptyState("No shorts available")}
+            scrollEventThrottle={16}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false, listener: handleScroll }
+            )}
+          />
+        );
+
+      case "playlists":
+        return (
+          <FlashList
+            data={playlists}
+            renderItem={({ item, index }) =>
+              renderPlaylistItem(item, index || 0)
+            }
+            keyExtractor={(item, index) =>
+              `playlist-${item.playlistId}-${index}`
+            }
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.flashListContent}
+            ListEmptyComponent={() =>
+              renderEmptyState("No playlists available")
+            }
+            scrollEventThrottle={16}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false, listener: handleScroll }
+            )}
+          />
+        );
+
+      case "about":
+        return (
+          <ScrollView
+            style={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={handleScroll}
+          >
+            {renderAboutContent()}
+            <View style={styles.bottomPadding} />
+          </ScrollView>
+        );
+
+      default:
+        return null;
+    }
+  }, [
+    activeTab,
+    tabLoading,
+    videos,
+    shorts,
+    playlists,
+    homeContent,
+    aboutData,
+  ]);
+
+  // Loading state
   if (loading) {
     return <LoadingScreen message="Loading channel..." />;
   }
 
+  // Error state
   if (error || !channelDetails) {
     return (
       <ErrorMessage
@@ -470,96 +597,44 @@ const ChannelScreen: React.FC = () => {
       />
     );
   }
-  const renderContent = () => {
-    if (activeTab === "about") {
-      return (
-        <FlashList
-          data={[]}
-          renderItem={() => null}
-          ListHeaderComponent={<>{renderAboutSection()}</>}
-          showsVerticalScrollIndicator={false}
-        />
-      );
-    }
-
-    if (activeTab === "home") {
-      if (tabLoading) {
-        return (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#ff0000" />
-          </View>
-        );
-      }
-
-      if (!Array.isArray(homeContent) || homeContent.length === 0) {
-        return (
-          <View style={styles.emptyContainer}>
-            <MaterialIcons name="home" size={48} color="#666" />
-            <Text style={styles.emptyText}>No content available</Text>
-          </View>
-        );
-      }
-
-      return (
-        <FlashList
-          data={homeContent}
-          renderItem={({ item: section }) => <HomeContent section={section} />}
-          keyExtractor={(item, index) => `home-section-${index}`}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.flashListContent}
-        />
-      );
-    }
-
-    if (activeTab === "shorts") {
-      return (
-        <FlashList
-          data={getContentData}
-          renderItem={renderItem}
-          keyExtractor={getKeyExtractor}
-          numColumns={3}
-          ListHeaderComponent={renderHeader}
-          ListEmptyComponent={tabLoading ? null : renderEmptyState}
-          contentContainerStyle={styles.shortsListContent}
-          showsVerticalScrollIndicator={false}
-        />
-      );
-    }
-
-    return (
-      <FlashList
-        data={getContentData}
-        renderItem={renderItem}
-        keyExtractor={getKeyExtractor}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={tabLoading ? null : renderEmptyState}
-        contentContainerStyle={styles.flashListContent}
-        showsVerticalScrollIndicator={false}
-      />
-    );
-  };
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={["top"]} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color="white" />
-        </TouchableOpacity>
-        <View style={styles.headerRight}>
-          <TouchableOpacity>
-            <MaterialIcons name="cast" size={24} color="white" />
+      {/* Top Header */}
+      <SafeAreaView edges={["top"]} style={styles.headerTop}>
+        <View style={styles.headerBar}>
+          <TouchableOpacity onPress={handleGoBack} activeOpacity={0.7}>
+            <Feather name="arrow-left" size={24} color="white" />
           </TouchableOpacity>
-          <TouchableOpacity>
-            <Feather name="search" size={22} color="white" />
-          </TouchableOpacity>
-          <TouchableOpacity>
-            <Feather name="more-vertical" size={24} color="white" />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity activeOpacity={0.7}>
+              <MaterialIcons name="cast" size={24} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7}>
+              <Feather name="search" size={22} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7}>
+              <Feather name="more-vertical" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
 
-      {(activeTab === "home" || activeTab === "about") && renderHeader}
-      {renderContent()}
+      {/* Channel Header (Scrollable with content) */}
+      {!isTabsFixed && renderChannelHeader()}
+
+      {/* Tabs (Sticky when header scrolls up) */}
+      <View
+        style={[
+          styles.stickyTabsWrapper,
+          isTabsFixed && styles.tabsFixedPosition,
+        ]}
+      >
+        {renderTabs()}
+      </View>
+
+      {/* Content (Scrollable) */}
+      {renderTabContent()}
     </View>
   );
 };
@@ -571,25 +646,53 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0f0f0f",
   },
-  header: {
+  headerTop: {
+    backgroundColor: "#0f0f0f",
+  },
+  headerBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingBottom: 8,
-    backgroundColor: "#0f0f0f",
-    marginTop: 15,
+    paddingVertical: 12,
   },
   headerRight: {
     flexDirection: "row",
     gap: 20,
+  },
+
+  // Sticky Tabs Wrapper
+  stickyTabsWrapper: {
+    backgroundColor: "#0f0f0f",
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#272727",
+  },
+  tabsFixedPosition: {
+    position: "absolute",
+    top: 60,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    backgroundColor: "#0f0f0f",
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#272727",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+
+  // Channel Header Section
+  headerContainer: {
+    backgroundColor: "#0f0f0f",
   },
   banner: {
     width: "100%",
     aspectRatio: 16 / 5,
     backgroundColor: "#282828",
   },
-  channelInfo: {
+  channelInfoSection: {
     padding: 16,
     alignItems: "center",
   },
@@ -603,7 +706,7 @@ const styles = StyleSheet.create({
   channelName: {
     color: "#f1f1f1",
     fontSize: 20,
-    fontWeight: "600",
+    fontWeight: "700",
     marginBottom: 4,
   },
   channelHandle: {
@@ -619,10 +722,12 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: "row",
     gap: 12,
+    width: "100%",
+    justifyContent: "center",
   },
   subscribeBtn: {
     backgroundColor: "#ff0000",
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingVertical: 10,
     borderRadius: 20,
   },
@@ -645,6 +750,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
+  durationBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 3,
+  },
+  durationText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  // Tabs
   tabsContainer: {
     flexDirection: "row",
     borderBottomWidth: 1,
@@ -657,45 +779,63 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   tabActive: {
-    borderBottomWidth: 2,
+    borderBottomWidth: 3,
     borderBottomColor: "#f1f1f1",
   },
   tabText: {
     color: "#aaa",
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   tabTextActive: {
     color: "#f1f1f1",
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+
+  // Content
+  contentContainer: {
+    flex: 1,
+    backgroundColor: "#0f0f0f",
+    marginTop: 15,
   },
   flashListContent: {
     paddingHorizontal: 12,
     paddingBottom: 100,
+    marginTop: 15,
   },
   shortsListContent: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
     paddingBottom: 100,
+    marginTop: 15,
   },
+  bottomPadding: {
+    height: 100,
+  },
+
+  // Loading & Empty States
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 60,
+    marginTop: 50,
   },
   emptyContainer: {
     alignItems: "center",
-    paddingVertical: 60,
+    paddingVertical: 80,
   },
   emptyText: {
     color: "#666",
-    fontSize: 14,
-    marginTop: 12,
+    fontSize: 16,
+    marginTop: 16,
+    fontWeight: "500",
   },
+
+  // Video Card
   videoCard: {
     flexDirection: "row",
     marginBottom: 12,
     paddingHorizontal: 4,
+    alignItems: "center",
   },
   videoThumbnail: {
     width: 160,
@@ -706,32 +846,35 @@ const styles = StyleSheet.create({
   videoInfo: {
     flex: 1,
     marginLeft: 12,
-    justifyContent: "flex-start",
+    justifyContent: "center",
   },
   videoTitle: {
     color: "#f1f1f1",
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
     lineHeight: 18,
     marginBottom: 4,
   },
   videoMeta: {
     color: "#aaa",
     fontSize: 11,
+    fontWeight: "500",
   },
-  moreButton: {
-    padding: 4,
-  },
+
+  // Short Card
   shortCard: {
     flex: 1,
     margin: 2,
     maxWidth: (SCREEN_WIDTH - 16) / 3,
+    backgroundColor: "#0f0f0f",
+    borderRadius: 8,
+    overflow: "hidden",
   },
   shortThumbnail: {
     width: "100%",
     aspectRatio: 9 / 16,
-    borderRadius: 8,
     backgroundColor: "#282828",
+    borderRadius: 8,
   },
   shortOverlay: {
     position: "absolute",
@@ -741,31 +884,39 @@ const styles = StyleSheet.create({
     bottom: 40,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
   shortTitle: {
     color: "#f1f1f1",
     fontSize: 11,
-    fontWeight: "500",
-    marginTop: 4,
+    fontWeight: "600",
+    marginTop: 6,
+    marginHorizontal: 4,
     lineHeight: 14,
   },
   shortViews: {
     color: "#aaa",
     fontSize: 10,
     marginTop: 2,
+    marginHorizontal: 4,
+    marginBottom: 6,
   },
+
+  // Playlist Card
   playlistCard: {
     marginBottom: 16,
     paddingHorizontal: 4,
   },
   playlistThumbnailContainer: {
     position: "relative",
+    overflow: "hidden",
+    borderRadius: 8,
   },
   playlistThumbnail: {
     width: "100%",
     aspectRatio: 16 / 9,
-    borderRadius: 8,
     backgroundColor: "#282828",
+    borderRadius: 8,
   },
   playlistOverlay: {
     position: "absolute",
@@ -773,7 +924,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: "40%",
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
     justifyContent: "center",
     alignItems: "center",
     borderTopRightRadius: 8,
@@ -783,21 +934,20 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     marginTop: 4,
+    fontWeight: "700",
   },
   playlistTitle: {
     color: "#f1f1f1",
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
     lineHeight: 18,
     marginTop: 8,
   },
-  playlistMeta: {
-    color: "#aaa",
-    fontSize: 12,
-    marginTop: 4,
-  },
+
+  // About Section
   aboutContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 20,
   },
   aboutSection: {
     marginBottom: 24,
@@ -805,7 +955,7 @@ const styles = StyleSheet.create({
   aboutLabel: {
     color: "#f1f1f1",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
     marginBottom: 8,
   },
   aboutText: {
@@ -818,17 +968,6 @@ const styles = StyleSheet.create({
     color: "#3ea6ff",
     fontSize: 14,
     lineHeight: 20,
-  },
-  homeContentContainer: {
-    padding: 16,
-  },
-  homeSection: {
-    marginBottom: 24,
-  },
-  homeSectionTitle: {
-    color: "#f1f1f1",
-    fontSize: 16,
     fontWeight: "600",
-    marginBottom: 12,
   },
 });
